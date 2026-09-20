@@ -39,7 +39,8 @@
 
     <!--
       底部不再是「重新同步」，改成跳转到「下一节课」页面。
-      想重新同步的话，点上面的诊断行区域即可（同步逻辑仍在）。
+      要重新同步就从电脑端再点一次「同步课表到手环」；
+      手环这边打开应用时会自动发一次 requestSync（见 setupInterconnect）。
     -->
     <div class="footer" @click="openNext">
       <text class="footer-text">{{footerText}}</text>
