@@ -1,0 +1,11 @@
+{
+  "api_level": 1,
+  "id": "io.github.lazyjcgit.bandschedule.devtool",
+  "name": "手环课表调试台",
+  "version": "1.0.0",
+  "author": "band-schedule",
+  "description": "直接向手环快应用 io.github.lazyjcgit.bandschedule 发送课表数据并查看回包，用于跳过中间环节调试手环渲染",
+  "runtime": "js",
+  "entry": "main.js",
+  "permissions": ["ui", "interconnect", "device"]
+}

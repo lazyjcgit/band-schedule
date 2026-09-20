@@ -1,0 +1,39 @@
+name: band_schedule_pc
+description: "手环课表助手 —— 把课表同步到小米手环 9 的桌面工具：连接手环、安装快应用、下发整学期课表"
+publish_to: 'none'
+
+# 版本号与 project.json 里的 pc 段保持一致
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # 设备层（移植自 OronBox，见 tools/port_oronbox.py）
+  protobuf: ^6.0.0        # 小米手环的协议就是 protobuf
+  fixnum: ^1.1.1          # protobuf 生成的代码需要
+  pointycastle: ^4.0.0    # 设备认证（HMAC-SHA256 / AES-CCM / HKDF）
+  crypto: ^3.0.6
+  archive: ^4.0.6         # 解压 rpk
+
+  # 账号登录（拿 authkey）
+  dio: ^5.8.0
+
+  cupertino_icons: ^1.0.8
+
+  # 说明：这里刻意**不使用任何 Flutter 插件**。
+  # Flutter 在 Windows 上构建插件需要符号链接支持，也就是要开启系统「开发者模式」；
+  # 我们不想为了一个文件选择框去改用户的系统设置。
+  # 文件选择框用 dart:ffi 直接调 Win32 的 GetOpenFileNameW（见 lib/src/platform/win_file_dialog.dart），
+  # 蓝牙 SPP 走 windows/runner 里的原生实现（移植自 OronBox）。
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

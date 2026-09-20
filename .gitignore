@@ -1,0 +1,82 @@
+# 依赖与构建产物 —— 这些由各自的工具链生成，不该进仓库
+node_modules/
+build/
+dist/
+.dart_tool/
+.packages
+pubspec.lock.bak
+*.iml
+.idea/
+.vscode/
+.temp_*/
+*.local
+*.log
+
+# 第三方克隆与离线资料
+#   _ref/ 里是从上游克隆来对照用的代码（OronBox 等），各自有自己的许可证，
+#   一起发布会带来体积和许可双重问题。需要时说清版本号让别人自己 clone。
+_ref/
+tools/toolchain/
+tools/npmboot/
+tools/_aar/
+.v2c/
+.video_agent/
+
+# 小米官方的 SDK 示例和接口文档 —— **小米的版权材料，不要跟着仓库发布**
+#   （PDF 是从官方下载的接口文档；txt 是从它抽出来的文本）
+#   需要时从官方开发者渠道获取，README 里说明了这件事。
+docs/xiaomi/demo/
+docs/xiaomi/*.zip
+docs/xiaomi/*.pdf
+docs/xiaomi/*.txt
+
+# 早期调研笔记：针对某一所学校做的（统一认证、教务接口、验证码），
+# 与「面向所有大学生」的定位不符，也不适合作为公开文档。留在本地自己看。
+docs/01-调研结论.md
+docs/02-技术方案.md
+
+# 针对该校接口/验证码的研究脚本（也是上面的调研笔记配套的探针）。
+# 留作本地复现用；公开仓库里不带。
+tools/ids_*.py
+tools/ehall_*.py
+tools/CookieProbe.java
+tools/run_cookie_test.py
+# 「产物里不该出现的词」清单 —— 里面就是要检查的敏感词本身，
+# 由 tools/verify-artifacts.py 读取后去 rpk 里反查，本身不进仓库。
+tools/forbidden-copy.txt
+
+# 第三方依赖：微软 WebView2 的 NuGet SDK（约 20 MB，含各架构 DLL）
+# 「登录小米账号」的二次验证窗口要用它。不跟着仓库走 —— 跑一次
+#   powershell -File pc\windows\scripts\install_webview2_sdk.ps1 -Version 1.0.4191.47
+# 就会下到这里（CMake 会自动找到）。
+pc/windows/packages/
+
+# ⚠️ 签名材料：私钥和证书**绝对不能**进仓库。
+#    公开私钥 = 任何人都能签出"看起来是你发的"安装包。
+#    别人构建时用自己的密钥即可（手环按包名授权，不校验签名者）。
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+*.der
+band/band-schedule/sign/
+android/keystore/
+
+# Android（已弃用的手机端，不随仓库发布）
+#
+# 为什么整块排除，而不是只排密钥：
+#   1. 里面是**针对某一所学校**的登录与教务抓取代码（包名、界面文案、接口地址
+#      都带着校名），和本项目「面向所有大学生」的定位不符；
+#   2. 它含有 android/keystore.properties（**明文签名密码**）和签名密钥库；
+#   3. 功能已弃用 —— PC 端直连手环，不再需要手机 App。
+# 代码仍留在本机，将来要重新维护时把这一行删掉即可。
+android/
+
+# 开发时的临时脚本与抓包产物（tools/ 下 _ 开头的都是）
+tools/_*
+!tools/__init__.py
+
+# 打包时被占用文件改名留下的备份
+*.old-running

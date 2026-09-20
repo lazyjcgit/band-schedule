@@ -1,0 +1,527 @@
+<template>
+  <div class="page">
+    <div class="header">
+      <div class="header-left">
+        <text class="date">{{dateText}}</text>
+        <text class="weekday">{{weekdayText}}</text>
+      </div>
+      <text class="week-badge">{{weekText}}</text>
+    </div>
+
+    <text class="diag">{{diagText}}</text>
+
+    <div class="body">
+      <div class="empty" if="{{courses.length === 0}}">
+        <text class="empty-title">{{emptyTitle}}</text>
+        <text class="empty-tip">{{emptyTip}}</text>
+      </div>
+
+      <!--
+        循环写法必须用不带别名的 for="{{数组}}"、循环体内用 $item。
+        带别名（for="c in courses"）在本项目的 aiot-toolkit 1.1.0 下会编译成
+        裸标识符（exp:function(){return{__list__:courses}}），运行时取不到值，
+        循环一次都不执行、列表整块空白。详见 tools/check-band-pages.py 的断言。
+      -->
+      <div class="list" if="{{courses.length > 0}}">
+        <div class="item" for="{{courses}}" style="border-left-color: {{$item.color}}">
+          <div class="item-head">
+            <text class="item-time">{{$item.timeText}}</text>
+            <text class="item-index">{{$item.sectionText}}</text>
+          </div>
+          <text class="item-name">{{$item.name}}</text>
+          <div class="item-foot">
+            <text class="item-room">{{$item.room}}</text>
+            <text class="item-teacher">{{$item.teacher}}</text>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!--
+      底部不再是「重新同步」，改成跳转到「下一节课」页面。
+      想重新同步的话，点上面的诊断行区域即可（同步逻辑仍在）。
+    -->
+    <div class="footer" @click="openNext">
+      <text class="footer-text">{{footerText}}</text>
+    </div>
+  </div>
+</template>
+
+<style>
+  /*
+    v2.0 布局（屏 192x490）。
+    Vela 的两条硬规矩：
+      1. 容器不会被内容撑开 —— 每一层都要写死 height
+      2. padding 是 content-box 之外额外加的 —— 高度账要把它算进去
+    高度账：header(14+26) + diag(14) + list(380) + footer(48) = 482 ≤ 490
+    行高账：item 66 + 上下 margin 3+3 = 72，5 行 = 360 ≤ 380（真实课表单日最多 5 门）
+    宽度账：margin 4 + border 3 + padding 8+8 + width 168 = 191 ≤ 192
+  */
+  .page {
+    flex-direction: column;
+    width: 192px;
+    height: 490px;
+    background-color: #000000;
+  }
+
+  /* 172 + padding 10+10 = 192，正好占满；写 192 会变成 212 超屏 */
+  .header {
+    width: 172px;
+    height: 26px;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 14px;
+    margin-bottom: 4px;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .header-left {
+    height: 26px;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  /* 日期字号从原来的 15 提到 19 */
+  .date {
+    height: 24px;
+    font-size: 19px;
+    color: #ffffff;
+    font-weight: bold;
+  }
+
+  .weekday {
+    height: 24px;
+    font-size: 14px;
+    color: #b9b9b9;
+    margin-left: 6px;
+  }
+
+  .week-badge {
+    height: 18px;
+    font-size: 13px;
+    color: #cfcfcf;
+  }
+
+  .diag {
+    width: 192px;
+    height: 14px;
+    font-size: 11px;
+    color: #6b7583;
+    text-align: center;
+  }
+
+  .body {
+    width: 192px;
+    height: 380px;
+    flex-direction: column;
+  }
+
+  .list {
+    width: 192px;
+    height: 380px;
+    flex-direction: column;
+  }
+
+  .item {
+    width: 168px;
+    height: 66px;
+    flex-direction: column;
+    margin-left: 4px;
+    margin-top: 3px;
+    margin-bottom: 3px;
+    padding-left: 8px;
+    padding-right: 8px;
+    border-left-width: 3px;
+    border-radius: 8px;
+    background-color: #1a1a1a;
+  }
+
+  .item-head {
+    width: 168px;
+    height: 18px;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  /* 起止时间从 11 提到 14 —— 这是列表里最该看清的一行 */
+  .item-time {
+    height: 18px;
+    font-size: 14px;
+    color: #eaeaea;
+    font-weight: bold;
+  }
+
+  .item-index {
+    height: 18px;
+    font-size: 11px;
+    color: #919191;
+  }
+
+  /* 课程名 16px 加粗，只要一行（长名字在 JS 里截断成前 9 个字 + …） */
+  .item-name {
+    width: 168px;
+    height: 26px;
+    font-size: 16px;
+    color: #ffffff;
+    font-weight: bold;
+    lines: 1;
+    text-overflow: ellipsis;
+  }
+
+  .item-foot {
+    width: 168px;
+    height: 20px;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  /* 地点 13px 用亮一点的蓝，保证一眼能看到 */
+  .item-room {
+    height: 20px;
+    font-size: 13px;
+    color: #8fc4f0;
+  }
+
+  .item-teacher {
+    height: 20px;
+    font-size: 12px;
+    color: #9a9a9a;
+  }
+
+  .empty {
+    width: 172px;
+    height: 380px;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    margin-left: 10px;
+    margin-right: 10px;
+  }
+
+  .empty-title {
+    width: 172px;
+    height: 24px;
+    font-size: 16px;
+    color: #cccccc;
+    text-align: center;
+  }
+
+  .empty-tip {
+    width: 172px;
+    height: 72px;
+    font-size: 12px;
+    color: #8a8a8a;
+    margin-top: 8px;
+    text-align: center;
+    lines: 5;
+  }
+
+  /* 底部按钮：整条可点，48px 高，方便手指点 */
+  .footer {
+    width: 192px;
+    height: 48px;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .footer-text {
+    width: 176px;
+    height: 36px;
+    font-size: 16px;
+    color: #ffffff;
+    text-align: center;
+    line-height: 36px;
+    border-radius: 18px;
+    background-color: #1f4e79;
+  }
+</style>
+
+<script>
+import interconnect from '@system.interconnect'
+import router from '@system.router'
+import {
+  normalizeSchedule,
+  coursesOfDay,
+  sectionRange,
+  weekdayOf,
+  weekOf,
+  formatDate,
+  WEEKDAY_NAMES,
+} from '../../common/schedule.js'
+import { MSG, encode, decode, createAssembler } from '../../common/protocol.js'
+import { nextCourse, truncateName } from '../../common/next.js'
+import { loadScheduleRaw, saveSchedule } from '../../common/store.js'
+
+/** 显示在界面上的版本号，用于确认设备上装的确实是新包。 */
+const APP_VERSION = '2.2'
+
+/** 课程名最多显示几个字，超了截断成「前 N 字…」。 */
+const NAME_MAX = 9
+
+export default {
+  private: {
+    schedule: null,
+    courses: [],
+    dateText: '',
+    weekdayText: '',
+    weekText: '',
+    diagText: 'v' + APP_VERSION,
+    footerText: '查看下一节课 ›',
+    emptyTitle: '还没有课表',
+    emptyTip: '在电脑上打开「手环课表助手」，点\u201c同步课表到手环\u201d即可下发。',
+    connect: null,
+    connectReady: false,
+    lastSyncAt: 0,
+    assembler: null,
+  },
+
+  onInit() {
+    this.assembler = createAssembler()
+    this.renderToday()
+    this.loadCache()
+    this.setupInterconnect()
+  },
+
+  onShow() {
+    // 从「下一节课」页面返回时也要按当前时间重算
+    this.renderToday()
+    if (this.connect) {
+      this.probeConnection()
+      this.sendToPhone(MSG.READY, { ts: Date.now() })
+    }
+  },
+
+  onDestroy() {
+    this.teardownInterconnect()
+  },
+
+  openNext() {
+    router.push({ uri: 'pages/next' })
+  },
+
+  // ---------- 数据 ----------
+
+  loadCache() {
+    const that = this
+    // 读写统一走 common/store.js：两个页面共用同一份实现，
+    // 避免"同一个读取 bug 存在两份"（storage.get 的回调直接给值，不是 {data:…}）
+    loadScheduleRaw(function (raw) {
+      if (!raw) return
+      try {
+        that.applySchedule(JSON.parse(raw), false)
+      } catch (e) {
+        console.log('[home] 本地课表解析失败：' + e.message)
+      }
+    })
+  },
+
+  saveCache(schedule) {
+    saveSchedule(schedule, function (ok, len) {
+      // 校验失败时在诊断行里标出来，手环上唯一能看到的地方
+      if (!ok) {
+        console.log('[home] 本地保存校验失败')
+      }
+    })
+  },
+
+  applySchedule(rawSchedule, persist) {
+    const schedule = normalizeSchedule(rawSchedule)
+    if (!schedule) {
+      this.diagText = 'v' + APP_VERSION + ' · 数据异常'
+      return false
+    }
+    this.schedule = schedule
+    if (persist) this.saveCache(schedule)
+    this.lastSyncAt = Date.now()
+    this.renderToday()
+    return true
+  },
+
+  renderToday() {
+    const today = new Date()
+    this.dateText = formatDate(today)
+    this.weekdayText = WEEKDAY_NAMES[weekdayOf(today) - 1]
+
+    const week = this.schedule ? weekOf(this.schedule, today) : 0
+    if (week > 0) {
+      const total = this.semesterLength()
+      this.weekText = total > 0 ? '第 ' + week + '/' + total + ' 周' : '第 ' + week + ' 周'
+    } else {
+      this.weekText = '周次未知'
+    }
+
+    const list = coursesOfDay(this.schedule, today)
+    const view = []
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i]
+      view.push({
+        id: c.id,
+        // 长课名只留开头几个字（真实数据里有 18 字的课名，一行放不下）
+        name: truncateName(c.name, NAME_MAX),
+        room: c.room,
+        teacher: c.teacher,
+        color: c.color,
+        timeText: sectionRange(this.schedule, c.start, c.stop) || '时间待同步',
+        sectionText: c.stop > c.start
+          ? '第' + c.start + '-' + c.stop + '节'
+          : '第' + c.start + '节',
+      })
+    }
+    this.courses = view
+
+    const all = (this.schedule && this.schedule.courses) ? this.schedule.courses.length : 0
+    const startRaw = (this.schedule && this.schedule.termStartDate) || ''
+    this.diagText = 'v' + APP_VERSION + ' · 共' + all + ' · 今' + view.length +
+      ' · ' + (week > 0 ? 'W' + week : '周?') +
+      (startRaw ? ' · 开' + startRaw.substring(5) : '')
+
+    if (!this.schedule || !this.schedule.courses || !this.schedule.courses.length) {
+      this.emptyTitle = '还没有课表'
+      this.emptyTip = '在电脑的「手环课表助手」里点\u201c同步课表到手环\u201d。'
+        + '若已同步过，看上方版本/门数是否更新。'
+    } else if (view.length === 0) {
+      this.emptyTitle = '今天没有课'
+      this.emptyTip = '已收到 ' + this.schedule.courses.length + ' 条排课，今天没有安排。'
+    }
+
+    // 顺带在按钮上提示下一节课，点进去能看到详情
+    const next = nextCourse(this.schedule, new Date())
+    if (next) {
+      const when = next.isNow ? '正在上' : (next.label + ' ' + next.startText)
+      this.footerText = when + ' · ' + truncateName(next.course.name, 5) + ' ›'
+    } else {
+      this.footerText = '暂无后续课程 ›'
+    }
+  },
+
+  semesterLength() {
+    const courses = (this.schedule && this.schedule.courses) || []
+    let max = 0
+    for (let i = 0; i < courses.length; i++) {
+      const weeks = courses[i].weeks || []
+      for (let j = 0; j < weeks.length; j++) {
+        if (weeks[j] > max) max = weeks[j]
+      }
+    }
+    return max
+  },
+
+  // ---------- 与电脑端的互联通道 ----------
+
+  setupInterconnect() {
+    try {
+      this.connect = interconnect.instance()
+    } catch (e) {
+      console.log('[home] interconnect unavailable: ' + e.message)
+      this.footerText = '本机不支持互联'
+      return
+    }
+
+    const that = this
+    this.connect.onmessage = function (res) {
+      that.handlePhoneMessage(res)
+    }
+    this.connect.onopen = function () {
+      console.log('[home] interconnect opened')
+      that.connectReady = true
+      that.requestSync()
+    }
+    this.connect.onclose = function () {
+      console.log('[home] interconnect closed')
+      that.connectReady = false
+    }
+    this.connect.onerror = function (res) {
+      console.log('[home] interconnect error: ' + JSON.stringify(res))
+      that.connectReady = false
+    }
+
+    this.probeConnection()
+    this.sendToPhone(MSG.READY, { ts: Date.now() })
+  },
+
+  /** 主动探一次连接状态；只等 onopen 可能永远等不到。 */
+  probeConnection() {
+    const that = this
+    if (!this.connect) return
+    this.connect.getReadyState({
+      success(res) {
+        if (res && res.status === 1) {
+          that.connectReady = true
+          that.requestSync()
+        }
+      },
+      fail() {},
+    })
+    this.connect.diagnosis({
+      success(res) {
+        const status = res && res.status
+        if (status === 0) {
+          that.connectReady = true
+          that.requestSync()
+        }
+      },
+      fail() {},
+    })
+  },
+
+  teardownInterconnect() {
+    if (!this.connect) return
+    this.connect.onmessage = null
+    this.connect.onopen = null
+    this.connect.onclose = null
+    this.connect.onerror = null
+  },
+
+  handlePhoneMessage(res) {
+    const msg = decode(res)
+    if (!msg) return
+    if (msg.t === MSG.HELLO) {
+      this.requestSync()
+      return
+    }
+
+    if (msg.t === MSG.SCHEDULE || msg.t === MSG.PART) {
+      if (!this.assembler) this.assembler = createAssembler()
+      const result = this.assembler.accept(msg)
+      if (!result || result.status === 'ignore' || result.status === 'progress') return
+      if (result.status === 'error') {
+        this.diagText = 'v' + APP_VERSION + ' · 接收不完整'
+        this.sendToPhone(MSG.ACK, { ok: false, error: result.reason })
+        return
+      }
+      const ok = this.applySchedule(result.value, true)
+      if (ok) {
+        const count = (this.schedule && this.schedule.courses) ? this.schedule.courses.length : 0
+        this.sendToPhone(MSG.ACK, { ok: true, courses: count })
+      } else {
+        this.sendToPhone(MSG.ACK, { ok: false, error: 'normalize failed' })
+      }
+    }
+  },
+
+  sendToPhone(type, payload) {
+    if (!this.connect) return
+    this.connect.send({
+      data: encode(type, payload),
+      success() {},
+      fail(res, code) {
+        console.log('[home] send ' + type + ' fail, code = ' + code)
+      },
+    })
+  },
+
+  requestSync() {
+    this.sendToPhone(MSG.REQUEST, {
+      current: Date.now(),
+      hasData: !!(this.schedule && this.schedule.courses && this.schedule.courses.length),
+      lastSyncAt: this.lastSyncAt,
+      week: this.schedule ? weekOf(this.schedule, new Date()) : 0,
+    })
+  },
+}
+</script>

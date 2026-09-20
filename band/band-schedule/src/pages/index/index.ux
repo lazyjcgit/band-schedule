@@ -1,0 +1,620 @@
+<template>
+  <div class="page">
+    <div class="header">
+      <div class="header-left">
+        <text class="date">{{dateText}}</text>
+        <text class="weekday">{{weekdayText}}</text>
+      </div>
+      <text class="week-badge">{{weekText}}</text>
+    </div>
+
+    <text class="diag">{{diagText}}</text>
+
+    <div class="body">
+      <div class="empty" if="{{courses.length === 0}}">
+        <text class="empty-title">{{emptyTitle}}</text>
+        <text class="empty-tip">{{emptyTip}}</text>
+      </div>
+
+      <!--
+        这里刻意用普通 div 而不是 <scroll>。
+        <scroll> 在文档里标注 "2+"（需要 APILevel 2），而本项目 manifest 声明的是
+        minAPILevel: 1；参考项目里唯一在真机上跑通的那个（m0tral/MiWatchHyperOSApps）
+        也完全没用 scroll，而是用 div + 显式高度做列表。
+        一天最多几门课，本来也不需要滚动，用已经验证过的写法最稳。
+      -->
+      <div class="list" if="{{courses.length > 0}}">
+        <!--
+          循环用官方 demo（小米自己的 interconnect 测试应用，rpk 实测可用）里
+          验证过的那一种写法：**不带别名、直接给数组**，循环体内用 $item。
+
+          它编译出来是这样：
+            __cf__({__opts__:{exp:function(){return e.dataTypes},key:"$idx",value:"$item"}}, ...)
+                                            ^^^^^^^^^^^^^^^^ 正确地解析成视图模型属性
+
+          而写成带别名的 for="course in courses" 时，我们这套 aiot-toolkit 1.1.0
+          编译成 exp:function(){return{__list__:courses,__tid__:"id"}}，
+          里面的 courses 是**裸标识符**（没带 vm 前缀），运行时取不到值，
+          于是循环一次都不执行 → 列表整块空白，而其它 {{ }} 绑定的文本却正常显示。
+        -->
+        <div class="item" for="{{courses}}" style="border-left-color: {{$item.color}}">
+          <div class="item-head">
+            <text class="item-time">{{$item.timeText}}</text>
+            <text class="item-index">{{$item.sectionText}}</text>
+          </div>
+          <text class="item-name">{{$item.name}}</text>
+          <div class="item-foot">
+            <text class="item-room">{{$item.room}}</text>
+            <text class="item-teacher">{{$item.teacher}}</text>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer" @click="onSyncClick">
+      <text class="footer-text">{{statusText}}</text>
+    </div>
+  </div>
+</template>
+
+<style>
+  /*
+    注意别用 padding-top 撑开顶部留白：默认 box-sizing 是 content-box，
+    height:490 + padding-top:26 会变成 516px 总高，超出 490px 的屏幕，
+    底部状态栏会被整个推出可视区（这就是之前看不到任何提示的原因）。
+    改成给 header 加 margin-top，总高仍然是 490px。
+  */
+  .page {
+    flex-direction: column;
+    width: 192px;
+    height: 490px;
+    background-color: #000000;
+  }
+
+  .diag {
+    width: 192px;
+    height: 13px;
+    font-size: 9px;
+    color: #5a6472;
+    text-align: center;
+  }
+
+  .diag2 {
+    width: 192px;
+    height: 13px;
+    font-size: 9px;
+    color: #5a6472;
+    text-align: center;
+    margin-bottom: 2px;
+  }
+
+  .header {
+    width: 192px;
+    height: 20px;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 22px;
+    margin-bottom: 4px;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .header-left {
+    height: 20px;
+    flex-direction: row;
+    /* 用 center 而不是 baseline：真机验证过的参考实现用的是 center，
+       baseline 在 Vela 上的支持情况没有把握 */
+    align-items: center;
+  }
+
+  .date {
+    height: 20px;
+    font-size: 15px;
+    color: #ffffff;
+    font-weight: bold;
+  }
+
+  .weekday {
+    height: 20px;
+    font-size: 12px;
+    color: #9a9a9a;
+    margin-left: 5px;
+  }
+
+  .week-badge {
+    height: 14px;
+    font-size: 11px;
+    color: #c8c8c8;
+  }
+
+  /*
+    列表高度是算出来的：490(屏) - 48(顶栏:24外边距+20字高+4内边距)
+    - 26(诊断两行) - 30(底栏) ≈ 386，留一点余量取 380。
+    给 scroll / empty **显式高度**而不是只写 flex:1：
+    某些 Vela 版本不会给只有 flex 的容器确定高度，它会塌成 0 高 ——
+    数据其实收到了，却渲染在一条零高度区域里，看起来就是"完全没显示"。
+  */
+  .body {
+    /* 显式高度，别让 Vela 把这一层算成 0 高把列表裁掉 */
+    width: 192px;
+    height: 380px;
+    flex-direction: column;
+  }
+
+  /*
+    Vela 的容器 div 不会像浏览器那样被内容撑开高度：不给 height 就按 0 渲染。
+    这就是"诊断行能显示（它是 .page 的直接子级 text）、但列表条目全空白"的原因。
+    真机上跑通的参考实现（m0tral/MiWatchHyperOSApps）里，每一层容器都是显式高度
+    （.item 用内联 height、.cell 用 height:100%），这里照同样的规矩来。
+
+    尺寸账（屏宽 192，content-box，padding/border 都要另外算进去）：
+      item   margin 8 + width 150 + padding 18 + border 3 = 179  ≤ 192
+      内部三行 14(head) + 32(name 两行) + 14(foot) = 60 = item 的 height
+      整项占高 60 + margin 上下 6 = 66，列表 380px 可放 5 门（一天最多也就 5 门）
+  */
+  .list {
+    width: 192px;
+    height: 380px;
+    flex-direction: column;
+  }
+
+  .item {
+    width: 150px;
+    height: 60px;
+    flex-direction: column;
+    margin-left: 8px;
+    margin-top: 3px;
+    margin-bottom: 3px;
+    padding-left: 9px;
+    padding-right: 9px;
+    border-left-width: 3px;
+    border-radius: 8px;
+    background-color: #1a1a1a;
+  }
+
+  .item-head {
+    width: 100%;
+    height: 14px;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .item-time {
+    height: 14px;
+    font-size: 11px;
+    color: #d8d8d8;
+  }
+
+  .item-index {
+    height: 14px;
+    font-size: 10px;
+    color: #8a8a8a;
+  }
+
+  .item-name {
+    width: 100%;
+    height: 32px;
+    font-size: 13px;
+    color: #ffffff;
+    lines: 2;
+    text-overflow: ellipsis;
+  }
+
+  .item-foot {
+    width: 100%;
+    height: 14px;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .item-room {
+    height: 14px;
+    font-size: 11px;
+    color: #a8b8cc;
+  }
+
+  .item-teacher {
+    height: 14px;
+    font-size: 10px;
+    color: #7a7a7a;
+  }
+
+  .empty {
+    /* 与 .list 同高，同样不依赖 flex 推导高度 */
+    width: 152px;
+    height: 380px;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    margin-left: 20px;
+    margin-right: 20px;
+  }
+
+  .empty-title {
+    width: 100%;
+    height: 20px;
+    font-size: 14px;
+    color: #cccccc;
+    text-align: center;
+  }
+
+  .empty-tip {
+    width: 100%;
+    height: 64px;
+    font-size: 11px;
+    color: #7a7a7a;
+    margin-top: 8px;
+    text-align: center;
+    lines: 4;
+  }
+
+  .footer {
+    width: 192px;
+    height: 30px;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .footer-text {
+    height: 14px;
+    font-size: 11px;
+    color: #6f8fb5;
+  }
+</style>
+
+<script>
+import interconnect from '@system.interconnect'
+import storage from '@system.storage'
+import router from '@system.router'
+import {
+  normalizeSchedule,
+  coursesOfDay,
+  sectionRange,
+  weekdayOf,
+  weekOf,
+  formatDate,
+  WEEKDAY_NAMES,
+} from '../../common/schedule.js'
+import { MSG, encode, decode, createAssembler } from '../../common/protocol.js'
+
+const STORAGE_KEY = 'schedule'
+
+/**
+ * 显示在界面上的版本号。重装 rpk 之后靠它确认手环上跑的确实是新包
+ * （手环侧载很容易装成旧包，之前排查时就没法确认这一点）。
+ */
+const APP_VERSION = '1.4'
+
+export default {
+  private: {
+    schedule: null,
+    courses: [],
+    dateText: '',
+    weekdayText: '',
+    weekText: '',
+    diagText: 'v' + APP_VERSION,
+    statusText: '连接电脑中…',
+    emptyTitle: '还没有课表',
+    emptyTip: '在电脑的「手环课表助手」里同步，或点下方状态栏重试。',
+
+    connect: null,
+    connectReady: false,
+    lastSyncAt: 0,
+    assembler: null,
+  },
+
+  onInit() {
+    this.assembler = createAssembler()
+    this.renderToday()
+    this.loadCache()
+    this.setupInterconnect()
+  },
+
+  onShow() {
+    // 从息屏/后台回来后重新按当天日期计算，并重探一次连接
+    // （手机端可能刚刚才打开 App 注册监听，这时候才有机会把课表要过来）
+    this.renderToday()
+    if (this.connect) {
+      this.probeConnection()
+      this.sendToPhone(MSG.READY, { ts: Date.now() })
+    }
+  },
+
+  onDestroy() {
+    this.teardownInterconnect()
+  },
+
+  // ---------- 数据 ----------
+
+  loadCache() {
+    const that = this
+    storage.get({
+      key: STORAGE_KEY,
+      success(data) {
+        const raw = data && data.data
+        if (!raw) return
+        try {
+          that.applySchedule(JSON.parse(raw), false)
+        } catch (e) {
+          console.log('[index] cached schedule broken: ' + e.message)
+        }
+      },
+      fail(data, code) {
+        console.log('[index] storage.get fail, code = ' + code)
+      },
+    })
+  },
+
+  saveCache(schedule) {
+    storage.set({
+      key: STORAGE_KEY,
+      value: JSON.stringify(schedule),
+      success() {
+        console.log('[index] schedule cached')
+      },
+      fail(data, code) {
+        console.log('[index] storage.set fail, code = ' + code)
+      },
+    })
+  },
+
+  applySchedule(rawSchedule, persist) {
+    const schedule = normalizeSchedule(rawSchedule)
+    if (!schedule) {
+      this.statusText = '课表数据异常'
+      return false
+    }
+    this.schedule = schedule
+    if (persist) this.saveCache(schedule)
+    this.lastSyncAt = Date.now()
+    this.renderToday()
+    return true
+  },
+
+  renderToday() {
+    const today = new Date()
+    this.dateText = formatDate(today)
+    this.weekdayText = WEEKDAY_NAMES[weekdayOf(today) - 1]
+
+    const week = this.schedule ? weekOf(this.schedule, today) : 0
+    if (week > 0) {
+      const total = this.scheduleSemesterLength()
+      this.weekText = total > 0 ? '第 ' + week + '/' + total + ' 周' : '第 ' + week + ' 周'
+    } else {
+      this.weekText = '周次未知'
+    }
+
+    const list = coursesOfDay(this.schedule, today)
+    const view = []
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i]
+      view.push({
+        id: c.id,
+        name: c.name,
+        room: c.room,
+        teacher: c.teacher,
+        color: c.color,
+        timeText: sectionRange(this.schedule, c.start, c.stop) || '时间待同步',
+        sectionText: '第' + c.start + (c.stop > c.start ? '-' + c.stop : '') + '节',
+      })
+    }
+    this.courses = view
+
+    // 把「收到了什么」直接写在界面上：总门数 / 今天几门 / 第几周 / 开学日期。
+    // 手环上没法看 logcat，出问题时这一行就是唯一的线索。
+    // 要压成一行放得下（192px、9px 字），所以开学日期只取 MM-DD。
+    const all = (this.schedule && this.schedule.courses) ? this.schedule.courses.length : 0
+    const startRaw = (this.schedule && this.schedule.termStartDate) || ''
+    const start = startRaw ? startRaw.substring(5) : '无'
+    this.diagText =
+      'v' + APP_VERSION + ' · 共' + all + ' · 今' + view.length +
+      ' · ' + (week > 0 ? 'W' + week : '周?') + ' · 开' + start
+
+    if (!this.schedule || !this.schedule.courses || !this.schedule.courses.length) {
+      this.emptyTitle = '还没有课表'
+      this.emptyTip =
+        '在电脑的「手环课表助手」里点\u201c同步课表到手环\u201d。若已同步过，看上方版本/门数是否更新。'
+    } else if (view.length === 0) {
+      this.emptyTitle = '今天没有课'
+      this.emptyTip =
+        '已收到 ' + this.schedule.courses.length + ' 门课的排课，今天没有安排。'
+    }
+
+    if (this.connectReady && this.schedule) {
+      this.statusText = '已同步 · 点此请求更新'
+    } else if (this.schedule) {
+      this.statusText = '离线课表 · 点此重连电脑'
+    }
+  },
+
+  scheduleSemesterLength() {
+    const courses = (this.schedule && this.schedule.courses) || []
+    let max = 0
+    for (let i = 0; i < courses.length; i++) {
+      const weeks = courses[i].weeks || []
+      for (let j = 0; j < weeks.length; j++) {
+        if (weeks[j] > max) max = weeks[j]
+      }
+    }
+    return max
+  },
+
+  // ---------- 与电脑端的互联通道 ----------
+
+  setupInterconnect() {
+    try {
+      this.connect = interconnect.instance()
+    } catch (e) {
+      console.log('[index] interconnect unavailable: ' + e.message)
+      this.statusText = '本机不支持互联'
+      return
+    }
+
+    const that = this
+    this.connect.onmessage = function (res) {
+      that.handlePhoneMessage(res)
+    }
+    this.connect.onopen = function () {
+      console.log('[index] interconnect opened')
+      that.connectReady = true
+      that.statusText = that.schedule ? '已连接 · 已同步' : '已连接 · 等待同步'
+      that.requestSync()
+    }
+    this.connect.onclose = function () {
+      console.log('[index] interconnect closed')
+      that.connectReady = false
+      that.statusText = that.schedule ? '离线课表 · 点此重连电脑' : '连接已断开 · 点此重试'
+    }
+    this.connect.onerror = function (res) {
+      console.log('[index] interconnect error: ' + JSON.stringify(res))
+      that.connectReady = false
+      that.statusText = '连接出错 · 点此重试'
+    }
+
+    this.probeConnection()
+    this.sendToPhone(MSG.READY, { ts: Date.now() })
+  },
+
+  /**
+   * 主动探一次连接状态。
+   *
+   * 官方文档说通信连接会自动建立，但 getReadyState / diagnosis 的 success 回调
+   * 才是「已经连上」的可靠信号 —— 只等 onopen 有可能永远等不到（比如回调注册得晚）。
+   * diagnosis 还能区分「对端 App 没装」（1001）这种具体情况，方便提示用户。
+   */
+  probeConnection() {
+    const that = this
+    if (!this.connect) return
+    this.connect.getReadyState({
+      success(res) {
+        if (res && res.status === 1) {
+          that.connectReady = true
+          that.requestSync()
+        }
+      },
+      fail(res, code) {
+        console.log('[index] getReadyState fail, code = ' + code)
+      },
+    })
+    // diagnosis 会把「连接中」也等到最终状态，用来给出更准确的提示
+    this.connect.diagnosis({
+      success(res) {
+        const status = res && res.status
+        console.log('[index] diagnosis status = ' + status)
+        if (status === 0) {
+          that.connectReady = true
+          that.statusText = that.schedule ? '已连接 · 已同步' : '已连接 · 等待同步'
+          that.requestSync()
+        } else if (status === 1001) {
+          that.statusText = '电脑端没连上手环'
+        } else if (status === 204) {
+          that.statusText = '连接超时 · 点此重试'
+        }
+      },
+      fail(res, code) {
+        console.log('[index] diagnosis fail, code = ' + code)
+      },
+    })
+  },
+
+  teardownInterconnect() {
+    if (!this.connect) return
+    this.connect.onmessage = null
+    this.connect.onopen = null
+    this.connect.onclose = null
+    this.connect.onerror = null
+  },
+
+  handlePhoneMessage(res) {
+    const msg = decode(res)
+    if (!msg) {
+      console.log('[index] unknown message: ' + JSON.stringify(res))
+      return
+    }
+    console.log('[index] phone -> band: ' + msg.t)
+    if (msg.t === MSG.HELLO) {
+      this.statusText = '电脑已就绪 · 正在同步'
+      this.requestSync()
+      return
+    }
+
+    // 课表可能是一帧直发，也可能被切成多帧，统一交给重组器
+    if (msg.t === MSG.SCHEDULE || msg.t === MSG.PART) {
+      if (!this.assembler) this.assembler = createAssembler()
+      const result = this.assembler.accept(msg)
+
+      if (!result || result.status === 'ignore') return
+      if (result.status === 'progress') {
+        this.statusText = '正在接收课表 ' + result.got + '/' + result.total
+        return
+      }
+      if (result.status === 'error') {
+        console.log('[index] reassemble failed: ' + result.reason)
+        this.statusText = '课表接收不完整 · 点此重新同步'
+        this.sendToPhone(MSG.ACK, { ok: false, error: result.reason })
+        return
+      }
+
+      const ok = this.applySchedule(result.value, true)
+      if (ok) {
+        const count = (this.schedule && this.schedule.courses)
+          ? this.schedule.courses.length
+          : 0
+        this.statusText = '同步成功 ' + this.timeText() + ' · ' + count + ' 门课'
+        this.sendToPhone(MSG.ACK, { ok: true, courses: count })
+      } else {
+        this.statusText = '课表数据异常 · 点此重新同步'
+        this.sendToPhone(MSG.ACK, { ok: false, error: 'normalize failed' })
+      }
+      return
+    }
+  },
+
+  timeText() {
+    const d = new Date()
+    const hh = d.getHours() < 10 ? '0' + d.getHours() : '' + d.getHours()
+    const mm = d.getMinutes() < 10 ? '0' + d.getMinutes() : '' + d.getMinutes()
+    return hh + ':' + mm
+  },
+
+  sendToPhone(type, payload) {
+    const payloadText = encode(type, payload)
+    if (!this.connect) return
+    this.connect.send({
+      data: payloadText,
+      success() {
+        console.log('[index] send ' + type + ' ok')
+      },
+      fail(res, code) {
+        console.log('[index] send ' + type + ' fail, code = ' + code)
+      },
+    })
+  },
+
+  requestSync() {
+    const payload = {
+      current: Date.now(),
+      hasData: !!(this.schedule && this.schedule.courses && this.schedule.courses.length),
+      lastSyncAt: this.lastSyncAt,
+      week: this.schedule ? weekOf(this.schedule, new Date()) : 0,
+    }
+    this.sendToPhone(MSG.REQUEST, payload)
+    if (!this.connectReady) this.statusText = '等待电脑连接…'
+  },
+
+  onSyncClick() {
+    if (!this.connect) {
+      this.setupInterconnect()
+      return
+    }
+    this.statusText = '正在请求同步…'
+    this.probeConnection()
+    this.requestSync()
+    this.sendToPhone(MSG.READY, { ts: Date.now(), manual: true })
+  },
+}
+</script>

@@ -1,0 +1,336 @@
+<template>
+  <div class="page">
+    <div class="topbar">
+      <!--
+        返回按钮：给了明确的宽高（74x38），既放大显示也放大可点范围。
+        @click 只绑在这里、不绑在 .topbar 上 —— 父子都绑会导致点一次
+        goBack 触发两次，直接退到应用外。
+      -->
+      <text class="back" @click="goBack">‹ 返回</text>
+      <text class="title">下一节课</text>
+    </div>
+
+    <!--
+      用 div 而不是 <block>：Vela 的组件列表里没有 block（那是快应用规范里的，
+      小米 Vela 不认）。这里给包裹层也写死了高度。
+    -->
+    <div class="state-ok" if="{{hasData}}">
+      <text class="dayinfo">{{dayInfo}}</text>
+
+      <div class="gap-top"></div>
+
+      <!-- 时间：这一屏最该看清的东西，用最大字号 -->
+      <text class="start-big">{{startText}}</text>
+      <text class="time-end">{{endText}} 下课 · {{sectionLabel}}</text>
+
+      <div class="gap-mid"></div>
+
+      <!-- 地点：加底色块重点突出 -->
+      <text class="room-label">上课地点</text>
+      <text class="room-big">{{roomText}}</text>
+
+      <div class="gap-mid2"></div>
+
+      <text class="course-name">{{nameText}}</text>
+      <text class="teacher">{{teacherText}}</text>
+
+      <div class="gap-status"></div>
+      <text class="status">{{statusText}}</text>
+      <text class="hint">点左上角返回 · 每分钟自动更新</text>
+    </div>
+
+    <div class="state-none" if="{{!hasData}}">
+      <div class="gap-top"></div>
+      <text class="nodata-title">{{emptyTitle}}</text>
+      <text class="nodata-tip">{{emptyTip}}</text>
+    </div>
+  </div>
+</template>
+
+<style>
+  /*
+    v2.2（屏 192x490）。返回按钮放大：字号 13→17，可点范围 74x38。
+    高度账（外层 .page = 490）：
+      topbar 8+48 = 56
+      state-ok 包裹层 = 424（内部：dayinfo 20 + 间隙 34+32+32+26 + 时间 74+34
+                              + 地点 16+60 + 课名 26 + 老师 22 + 状态 26 + 提示 22）
+      合计 56 + 424 = 480 ≤ 490
+    宽度账：topbar 内容宽 172 + padding 10+10 = 192
+            返回按钮 74 + 标题 78 = 152 ≤ 172
+    Vela 容器不会被内容撑开，所以每一层都写死 height；
+    大字用 line-height 与 height 相同来做垂直居中。
+  */
+  .page {
+    flex-direction: column;
+    width: 192px;
+    height: 490px;
+    background-color: #000000;
+  }
+
+  .state-ok {
+    width: 192px;
+    height: 424px;
+    flex-direction: column;
+  }
+
+  /* 无数据时的高度：间隙 34 + 标题 28 + 外边距 10 + 提示 80 = 152 */
+  .state-none {
+    width: 192px;
+    height: 152px;
+    flex-direction: column;
+  }
+
+  /* 172 + padding 10+10 = 192，正好占满；写 192 会变成 212 超屏 */
+  .topbar {
+    width: 172px;
+    height: 48px;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  /* 返回按钮：明确的 74x38 可点范围 + 底色胶囊，比原来大一圈 */
+  .back {
+    width: 74px;
+    height: 38px;
+    font-size: 17px;
+    color: #bcdcff;
+    text-align: center;
+    line-height: 38px;
+    border-radius: 19px;
+    background-color: #16202c;
+  }
+
+  .title {
+    width: 78px;
+    height: 24px;
+    font-size: 14px;
+    color: #9a9a9a;
+    text-align: right;
+  }
+
+  .dayinfo {
+    width: 192px;
+    height: 20px;
+    font-size: 14px;
+    color: #cfcfcf;
+    text-align: center;
+  }
+
+  .gap-top { width: 192px; height: 34px; }
+  .gap-mid { width: 192px; height: 32px; }
+  .gap-mid2 { width: 192px; height: 32px; }
+  .gap-status { width: 192px; height: 26px; }
+
+  /* 开始时间：全屏最大的字 */
+  .start-big {
+    width: 192px;
+    height: 74px;
+    font-size: 54px;
+    font-weight: bold;
+    color: #ffffff;
+    text-align: center;
+    line-height: 74px;
+  }
+
+  .time-end {
+    width: 192px;
+    height: 34px;
+    font-size: 14px;
+    color: #b0b0b0;
+    text-align: center;
+  }
+
+  .room-label {
+    width: 192px;
+    height: 16px;
+    font-size: 12px;
+    color: #8a8a8a;
+    text-align: center;
+  }
+
+  /* 地点：底色块 + 大字号，一眼就能看到 */
+  .room-big {
+    width: 168px;
+    height: 60px;
+    margin-left: 12px;
+    font-size: 34px;
+    font-weight: bold;
+    color: #ffffff;
+    text-align: center;
+    line-height: 60px;
+    border-radius: 12px;
+    background-color: #1f6feb;
+  }
+
+  .course-name {
+    width: 192px;
+    height: 26px;
+    font-size: 17px;
+    color: #e8e8e8;
+    text-align: center;
+  }
+
+  .teacher {
+    width: 192px;
+    height: 22px;
+    font-size: 13px;
+    color: #9a9a9a;
+    text-align: center;
+  }
+
+  .status {
+    width: 192px;
+    height: 26px;
+    font-size: 14px;
+    color: #6fcf97;
+    text-align: center;
+  }
+
+  .hint {
+    width: 192px;
+    height: 22px;
+    font-size: 11px;
+    color: #6b7583;
+    text-align: center;
+  }
+
+  .nodata-title {
+    width: 192px;
+    height: 28px;
+    font-size: 18px;
+    color: #cccccc;
+    text-align: center;
+  }
+
+  .nodata-tip {
+    width: 168px;
+    height: 80px;
+    margin-left: 12px;
+    margin-top: 10px;
+    font-size: 12px;
+    color: #8a8a8a;
+    text-align: center;
+    lines: 5;
+  }
+</style>
+
+<script>
+import router from '@system.router'
+import { normalizeSchedule, WEEKDAY_NAMES } from '../../common/schedule.js'
+import { nextCourse, sectionLabel, truncateName } from '../../common/next.js'
+import { loadScheduleRaw } from '../../common/store.js'
+
+const APP_VERSION = '2.2'
+
+/** 重新计算的间隔：下课后要能自动切到下一节。 */
+const TICK_MS = 20000
+
+export default {
+  private: {
+    hasData: false,
+    dayInfo: '',
+    startText: '--:--',
+    endText: '--:--',
+    sectionLabel: '',
+    roomText: '待定',
+    nameText: '',
+    teacherText: '',
+    statusText: '',
+    emptyTitle: '没有课表数据',
+    emptyTip: '先在电脑的「手环课表助手」里同步课表，再回来看这一页。',
+    tickTimer: null,
+    schedule: null,
+  },
+
+  onInit() {
+    this.loadSchedule()
+    this.tick()
+    const that = this
+    this.tickTimer = setInterval(function () {
+      that.tick()
+    }, TICK_MS)
+  },
+
+  onShow() {
+    // 每次进来都重读缓存并重算，保证是最新的
+    this.loadSchedule()
+    this.tick()
+  },
+
+  onDestroy() {
+    if (this.tickTimer) {
+      clearInterval(this.tickTimer)
+      this.tickTimer = null
+    }
+  },
+
+  goBack() {
+    router.back()
+  },
+
+  loadSchedule() {
+    const that = this
+    // 与主页同一份实现（common/store.js）。
+    // 这里原来读的是 data.data，永远取不到值，所以一进这页就显示"没有数据"。
+    loadScheduleRaw(function (raw) {
+      if (!raw) {
+        that.schedule = null
+        that.tick()
+        return
+      }
+      try {
+        that.schedule = normalizeSchedule(JSON.parse(raw))
+      } catch (e) {
+        console.log('[next] 本地课表解析失败：' + e.message)
+        that.schedule = null
+      }
+      that.tick()
+    })
+  },
+
+  /** 按「当前时间」重算下一节课。 */
+  tick() {
+    const now = new Date()
+    const next = nextCourse(this.schedule, now)
+
+    if (!next) {
+      this.hasData = false
+      this.emptyTitle = this.schedule ? '近期没有课' : '没有课表数据'
+      this.emptyTip = this.schedule
+        ? '接下来 7 天都没有排课。'
+        : '先在电脑的「手环课表助手」里同步课表。'
+      return
+    }
+
+    this.hasData = true
+    const c = next.course
+    this.startText = next.startText || '--:--'
+    this.endText = next.endText || '--:--'
+    this.sectionLabel = sectionLabel(c)
+    this.roomText = c.room || '待定'
+    this.nameText = truncateName(c.name, 9)
+    this.teacherText = c.teacher || ''
+
+    const weekText = next.week > 0 ? '第' + next.week + ' 周' : ''
+    const dayText = next.label + ' ' + WEEKDAY_NAMES[next.weekday - 1]
+    this.dayInfo = weekText ? (dayText + ' · ' + weekText) : dayText
+
+    if (next.isNow) {
+      const left = next.endMin - (now.getHours() * 60 + now.getMinutes())
+      this.statusText = left > 0 ? '正在上 · 还有 ' + left + ' 分钟下课' : '正在上'
+    } else if (next.minutesUntil >= 0) {
+      const m = next.minutesUntil
+      const h = Math.floor(m / 60)
+      const rest = m % 60
+      const left = h > 0 ? (h + ' 小时 ' + rest + ' 分钟') : (m + ' 分钟')
+      this.statusText = '距上课还有 ' + left
+    } else {
+      this.statusText = ''
+    }
+  },
+}
+</script>

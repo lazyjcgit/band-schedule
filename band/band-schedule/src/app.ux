@@ -1,0 +1,10 @@
+<script>
+export default {
+  onCreate() {
+    console.log('[band-schedule] app created')
+  },
+  onDestroy() {
+    console.log('[band-schedule] app destroyed')
+  }
+}
+</script>

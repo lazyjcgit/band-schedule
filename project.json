@@ -1,0 +1,20 @@
+{
+  "_comment": "项目标识的单一事实来源。改名只需要改这里，其余地方都从本文件读取。",
+  "band": {
+    "package": "io.github.lazyjcgit.bandschedule",
+    "name": "手环课表",
+    "versionName": "3.0.0",
+    "versionCode": 5,
+    "dir": "band/band-schedule"
+  },
+  "pc": {
+    "package": "io.github.lazyjcgit.bandschedule.pc",
+    "name": "手环课表助手",
+    "description": "把课表同步到小米手环 9 的桌面工具：连接手环、安装快应用、下发整学期课表"
+  },
+  "project": {
+    "name": "手环课表",
+    "repo": "band-schedule",
+    "license": "AGPL-3.0"
+  }
+}
